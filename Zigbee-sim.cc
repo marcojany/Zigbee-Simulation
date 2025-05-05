@@ -1,5 +1,4 @@
-/*
-
+/**
  * Copyright (c) 2024 Tokushima University, Japan
  *
  * SPDX-License-Identifier: GPL-2.0-only
@@ -10,7 +9,7 @@
  * Modifications and extensions by:
  *   Marco Giannatiempo
 
- *
+ * 
  * Mesh routing example with data transmission using a simple topology.
  *
  * This example shows the NWK layer procedure to perform a route request.
@@ -57,6 +56,43 @@ using namespace ns3::zigbee;
 NS_LOG_COMPONENT_DEFINE("ZigbeeRouting"); //Enable logging for the ZigbeeRouting component
 
 ZigbeeStackContainer zigbeeStacks; //A container to hold all the Zigbee stacks in the simulation. This is used to access the stacks later.
+
+//todo Packet Tracking //-NEW-
+uint32_t g_totalPacketsSent = 0;
+uint32_t g_totalPacketsReceived = 0;
+uint32_t g_packetCounter = 0; // Unique packet identifier
+//Packet Tag
+class PacketIdTag : public Tag
+{
+public:
+    static TypeId GetTypeId(void)
+    {
+        static TypeId tid = TypeId("PacketIdTag")
+                                .SetParent<Tag>()
+                                .AddConstructor<PacketIdTag>();
+        return tid;
+    }
+    TypeId GetInstanceTypeId() const override { return GetTypeId(); }
+    uint32_t GetSerializedSize() const override { return sizeof(uint32_t); }
+    void Serialize(TagBuffer i) const override
+    {
+        i.WriteU32(m_packetId);
+    }
+    void Deserialize(TagBuffer i) override
+    {
+        m_packetId = i.ReadU32();
+    }
+    void Print(std::ostream& os) const override
+    {
+        os << "PacketId=" << m_packetId;
+    }
+
+    void SetPacketId(uint32_t id) { m_packetId = id; }
+    uint32_t GetPacketId() const { return m_packetId; }
+
+private:
+    uint32_t m_packetId;
+};
 
 //* TraceRoute Function
 //Purpose: This function is crucial for understanding how routing works. It traces the route from a source (src) to a destination (dst) by querying the routing tables of the intermediate nodes.
@@ -120,13 +156,27 @@ TraceRoute(Mac16Address src, Mac16Address dst)
 //Purpose: This is a callback function that is invoked when a Zigbee node receives a data packet.
 //What it does:
 //Prints a message to the console indicating that a packet has been received, the receiving node's ID, and the packet size.
-static void
+static void                         
 NwkDataIndication(Ptr<ZigbeeStack> stack, NldeDataIndicationParams params, Ptr<Packet> p)
 {
-    std::cout << Simulator::Now().As(Time::S) << " Node " << stack->GetNode()->GetId() << " | "
-              << "NsdeDataIndication:  Received packet of size " << p->GetSize() << "\n";
+    // --- Packet Received ---
+    PacketIdTag tag;
+    if (p->PeekPacketTag(tag))
+    {
+        // Check if the packet has already been received
+        if (tag.GetPacketId() > 0)
+        {
+            g_totalPacketsReceived++;
+            std::cout << Simulator::Now().As(Time::S) << " Node " << stack->GetNode()->GetId() << " | "
+                      << "NsdeDataIndication:  Received packet of size " << p->GetSize() << " | Packet ID: " << tag.GetPacketId() << "\n";
+        }
+    }
+    else
+    {
+        std::cout << Simulator::Now().As(Time::S) << " Node " << stack->GetNode()->GetId() << " | "
+                  << "NsdeDataIndication:  Received packet of size " << p->GetSize() << " | Packet ID: UNKNOWN" << "\n";
+    }
 }
-
 
 //* NwkNetworkFormationConfirm Function
 //Purpose: This is a callback function that is invoked when the network formation process (by the coordinator) is confirmed.
@@ -251,7 +301,17 @@ SendData(Ptr<ZigbeeStack> stackSrc, Ptr<ZigbeeStack> stackDst)
     // we intend to send data. If a route do not exist, we will search for a route
     // before transmitting data (Mesh routing).
 
+    // --- Packet Sent ---
+    g_totalPacketsSent++;
+    g_packetCounter++;
+
     Ptr<Packet> p = Create<Packet>(5);
+
+    // --- Add Packet Tag ---
+    PacketIdTag tag;
+    tag.SetPacketId(g_packetCounter);
+    p->AddPacketTag(tag);
+
     NldeDataRequestParams dataReqParams;
     dataReqParams.m_dstAddrMode = UCST_BCST;
     dataReqParams.m_dstAddr = stackDst->GetNwk()->GetNetworkAddress();
@@ -480,8 +540,30 @@ main(int argc, char* argv[])
                                    netDiscParams4);
 
  //Data Transmission
-    // 3- Find Route and Send data
-    Simulator::Schedule(Seconds(8), &SendData, zstack0, zstack3);
+    // 3- Find Route and Send data from ZR0 to ZR3
+    //Simulator::Schedule(Seconds(8), &SendData, zstack0, zstack3);     //OLD
+    double startTime = 8.0; // Secondo iniziale
+    double interval = 0.5;  // Secondi tra i pacchetti
+    int numPacketsToSend = 10; // Numero di pacchetti da inviare
+    for (int i = 0; i < numPacketsToSend; ++i) {
+        Simulator::Schedule(Seconds(startTime + i * interval), &SendData, zstack0, zstack3);
+    }
+ // --- PDR Calculation and Output ---
+    Simulator::Schedule(Seconds(19), []() {
+        std::cout << "\n--- Simulation Results ---\n";
+        std::cout << "Total Packets Sent: " << g_totalPacketsSent << "\n";
+        std::cout << "Total Packets Received: " << g_totalPacketsReceived << "\n";
+        if (g_totalPacketsSent > 0)
+        {
+            double pdr = (double)g_totalPacketsReceived / g_totalPacketsSent;
+            std::cout << "Packet Delivery Ratio (PDR): " << pdr << "\n";
+        }
+        else
+        {
+            std::cout << "No packets were sent.\n";
+        }
+        std::cout << "--- End of Simulation Results ---\n";
+    });
  //Simulation Control
     Simulator::Stop(Seconds(20));
     Simulator::Run();
