@@ -4,7 +4,9 @@
  *  SPDX-License-Identifier: GPL-2.0-only
  * 
  *  This file is a modified version of an original work by:
- *    Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
+ *  Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
+ *  Original source:
+ *  [Zigbee Network Routing in NS-3](https://www.nsnam.org/docs/release/3.44/doxygen/d1/d54/zigbee-nwk-routing_8cc.html) 
  * 
  *  Modifications and extensions by:
  *  Marco Giannatiempo
@@ -34,22 +36,8 @@
  *  At the end of the simulation run, it calculates and prints key performance metrics, including Packet Delivery Ratio (PDR),
  *  average, minimum, and maximum end-to-end latency, and jitter. It also prints the Neighbor and Routing tables of a specified node
  *  and performs a TraceRoute between the source and destination to visualize the path used.
-  
- *  Network Extended PAN id: 0X000000000000CA:FE (based on the PAN coordinator address)
  *
- *  Devices Addresses:
  *
- *  [Coordinator] ZC  (dev0 | Node 0): [00:00:00:00:00:00:CA:FE]  
- *  [Router 1]    ZR1 (dev1 | Node 1): [00:00:00:00:00:00:00:01]
- *  [Router 2]    ZR2 (dev2 | Node 2): [00:00:00:00:00:00:00:02]
- *  [Router 3]    ZR3 (dev3 | Node 3): [00:00:00:00:00:00:00:03]
- *  [Router 4]    ZR4 (dev4 | Node 4): [00:00:00:00:00:00:00:04]
- *  [End Device 5]    ZR5 (dev5 | Node 5): [00:00:00:00:00:00:00:05]
- *  [End Device 6]    ZR6 (dev6 | Node 6): [00:00:00:00:00:00:00:06]
- *  [End Device 7]    ZR7 (dev7 | Node 7): [00:00:00:00:00:00:00:07]
- *  [End Device 8]    ZR8 (dev8 | Node 8): [00:00:00:00:00:00:00:08]
- *  [End Device 9]    ZR9 (dev9 | Node 9): [00:00:00:00:00:00:00:09]
- 
  *  Topology:
  *  
  *  Legend:
@@ -76,7 +64,7 @@
  *     |             
  * -150|
  *          -150     -100      -50        0         50       100       150   meters
-
+ *
  *  
  *             
  *             
@@ -97,11 +85,11 @@
 
 #include <iostream>
 
-#include <map>          // Per mappare ID pacchetto -> tempo invio
-#include <vector>       // Per memorizzare le latenze
-#include <numeric>      // Per std::accumulate (somma)
-#include <algorithm>    // Per std::min_element, std::max_element
-#include <cmath>        // Per std::sqrt (per jitter)
+#include <map>          // To map packet ID -> send time
+#include <vector>       // To store latencies
+#include <numeric>      // For std::accumulate (sum)
+#include <algorithm>    // For std::min_element, std::max_element
+#include <cmath>        // For std::sqrt (for jitter)
 
 using namespace ns3;
 using namespace ns3::lrwpan;
@@ -114,9 +102,9 @@ ZigbeeStackContainer zigbeeStacks; //A container to hold all the Zigbee stacks i
 //Packet Tracking
 uint32_t g_totalPacketsSent = 0;
 uint32_t g_totalPacketsReceived = 0;
-uint32_t g_packetCounter = 0; // Unique packet identifier
-std::map<uint32_t, Time> g_sendTimeMap; // Mappa per tenere traccia del tempo di invio dei pacchetti
-std::vector<Time> g_delayList;       // Lista delle latenze end-to-end per i pacchetti ricevuti
+uint32_t g_packetCounter = 0;           // Unique packet identifier
+std::map<uint32_t, Time> g_sendTimeMap; // Map to track packet send times
+std::vector<Time> g_delayList;          // List of end-to-end delays for received packets
 //Packet Tag
 class PacketIdTag : public Tag
 {
@@ -207,32 +195,32 @@ TraceRoute(Mac16Address src, Mac16Address dst)
     std::cout << "\n";
 }
 
-//* Funzione Wrapper per chiamare TraceRoute al momento schedulato
+//* Wrapper function to call TraceRoute at the scheduled time
 static void ScheduleTraceRouteWrapper(Ptr<ZigbeeStack> srcStack, Ptr<ZigbeeStack> dstStack)
 {
-    // Controllo di sicurezza sui puntatori
+    // Safety check on pointers
     if (!srcStack || !dstStack) {
-        NS_LOG_ERROR("ScheduleTraceRouteWrapper: Ricevuto puntatore a stack non valido.");
+        NS_LOG_ERROR("ScheduleTraceRouteWrapper: Received invalid stack pointer.");
         return;
     }
 
-    // Ottieni gli indirizzi di rete AL MOMENTO DELL'ESECUZIONE
+    // Get network addresses AT THE TIME OF EXECUTION
     Mac16Address srcAddr = srcStack->GetNwk()->GetNetworkAddress();
     Mac16Address dstAddr = dstStack->GetNwk()->GetNetworkAddress();
 
-    // Controllo se gli indirizzi sono validi (diversi da FF:FF)
+    // Check if addresses are valid (different from FF:FF)
     if (srcAddr == Mac16Address("FF:FF") || dstAddr == Mac16Address("FF:FF")) {
-         NS_LOG_WARN("ScheduleTraceRouteWrapper: Indirizzo Sorgente [" << srcAddr << "] o Destinazione [" << dstAddr
-                   << "] non valido (FF:FF) al momento dell'esecuzione T=" << Simulator::Now().As(Time::S) << ". TraceRoute annullato.");
-         std::cout << "WARN: TraceRoute annullato a T=" << Simulator::Now().As(Time::S)
-                   << "s - Indirizzo Sorgente [" << srcAddr << "] o Destinazione [" << dstAddr << "] non valido (FF:FF).\n";
-         return; // Non chiamare TraceRoute se gli indirizzi non sono validi
+         NS_LOG_WARN("ScheduleTraceRouteWrapper: Source Address [" << srcAddr << "] or Destination [" << dstAddr
+                   << "] not valid (FF:FF) at the time of execution T=" << Simulator::Now().As(Time::S) << ". TraceRoute canceled.");
+         std::cout << "WARN: TraceRoute canceled at T=" << Simulator::Now().As(Time::S)
+                   << "s - Source Address [" << srcAddr << "] or Destination [" << dstAddr << "] not valid (FF:FF).\n";
+         return; // Do not call TraceRoute if addresses are not valid
     }
 
-    // Log ed esecuzione di TraceRoute
+    // Log and execute TraceRoute
     NS_LOG_INFO("Executing TraceRoute from " << srcAddr << " to " << dstAddr << " at T=" << Simulator::Now().As(Time::S));
-    std::cout << "INFO: Eseguendo TraceRoute da " << srcAddr << " a " << dstAddr << " (Schedulato per T=" << Simulator::Now().As(Time::S) << "s)\n";
-    TraceRoute(srcAddr, dstAddr); // Chiama la funzione TraceRoute originale con gli indirizzi recuperati ora
+    std::cout << "INFO: Executing TraceRoute from " << srcAddr << " to " << dstAddr << " (Scheduled for T=" << Simulator::Now().As(Time::S) << "s)\n";
+    TraceRoute(srcAddr, dstAddr); // Call the original TraceRoute function with the currently retrieved addresses
 }
 
 //* NwkDataIndication Function
@@ -243,32 +231,31 @@ static void
  NwkDataIndication(Ptr<ZigbeeStack> stack, NldeDataIndicationParams params, Ptr<Packet> p)
 {
     PacketIdTag tag;
-    if (p->PeekPacketTag(tag)) // Controlla se il pacchetto ha il nostro tag
+    if (p->PeekPacketTag(tag)) // Check if the packet has our tag
     {
         uint32_t packetId = tag.GetPacketId();
-        if (packetId > 0) // Assicurati che l'ID sia valido
+        if (packetId > 0) // Ensure the ID is valid
         {
-            auto it = g_sendTimeMap.find(packetId); // Cerca il tempo di invio nella mappa
-            if (it != g_sendTimeMap.end()) // Trovato?
+            auto it = g_sendTimeMap.find(packetId); // Search for the send time in the map
+            if (it != g_sendTimeMap.end()) // Found?
             {
-                Time sendTime = it->second;       // Tempo di invio registrato
-                Time currentTime = Simulator::Now(); // Tempo di ricezione corrente
-                Time delay = currentTime - sendTime; // Calcola latenza
+                Time sendTime = it->second;          // Recorded send time
+                Time currentTime = Simulator::Now(); // Current reception time
+                Time delay = currentTime - sendTime; // Calculate latency
 
-                g_delayList.push_back(delay);     // Aggiungi la latenza alla lista
-                g_totalPacketsReceived++;         // Incrementa pacchetti ricevuti *validi*
-                g_sendTimeMap.erase(it);          // Rimuovi l'entry dalla mappa (pacchetto gestito)
+                g_delayList.push_back(delay);        // Add latency to the list
+                g_totalPacketsReceived++;            // Increment *valid* received packets
+                g_sendTimeMap.erase(it);             // Remove the entry from the map (packet handled)
 
-                // Log più dettagliato sulla ricezione
+                // More detailed log on reception
                 NS_LOG_INFO("Node " << stack->GetNode()->GetId() << " | NwkDataIndication: Received Packet ID: "
                             << packetId << " | Size: " << p->GetSize() << " | Delay: " << delay.GetSeconds() << " s");
                 std::cout << Simulator::Now().As(Time::S) << " Node " << stack->GetNode()->GetId() << " | "
                           << "NwkDataIndication: Received Packet ID: " << packetId << " | Delay: " << delay.GetSeconds() << " s\n";
-
             }
             else
             {
-                // Pacchetto ricevuto ma ID non trovato nella mappa (potrebbe succedere se il pacchetto arriva dopo molto tempo o c'è un errore)
+                // Packet received but ID not found in the map (could happen if the packet arrives after a long time or there's an error)
                  NS_LOG_WARN("Node " << stack->GetNode()->GetId() << " | NwkDataIndication: Received Packet ID: " << packetId << " but no send time found!");
                  std::cout << Simulator::Now().As(Time::S) << " Node " << stack->GetNode()->GetId() << " | "
                           << "NwkDataIndication: Received Packet ID: " << packetId << " NO SEND TIME!\n";
@@ -332,12 +319,12 @@ NwkNetworkDiscoveryConfirm(Ptr<ZigbeeStack> stack, NlmeNetworkDiscoveryConfirmPa
         NlmeJoinRequestParams joinParams;
 
         zigbee::CapabilityInformation capaInfo;
-        // Set device type based on node ID
+        // Set device type based on node ID (Nodes 0-4 are Routers, 5-9 are End Devices)
         if (stack->GetNode()->GetId() >= 1 && stack->GetNode()->GetId() <= 4) // Nodes 1 to 4 are routers
         {
             NS_LOG_INFO("Node " << stack->GetNode()->GetId() << " joining as ROUTER");
             capaInfo.SetDeviceType(ROUTER);
-        }
+        } 
         else if (stack->GetNode()->GetId() >= 5 && stack->GetNode()->GetId() <= 9) // Nodes 5 to 9 are end devices
         {
             NS_LOG_INFO("Node " << stack->GetNode()->GetId() << " joining as END DEVICE");
@@ -375,12 +362,12 @@ NwkJoinConfirm(Ptr<ZigbeeStack> stack, NlmeJoinConfirmParams params)
                   << params.m_extendedPanId << "\n"
                   << std::dec;
 
-        // Controlla se il nodo NON è l'End Device prima di avviare il router
-        if (stack->GetNode()->GetId() >= 1 && stack->GetNode()->GetId() <= 4) // Esegui solo se NON è End Device
+        // Check if the node is NOT an End Device before starting the router
+        if (stack->GetNode()->GetId() >= 1 && stack->GetNode()->GetId() <= 4) // Execute only if NOT an End Device
         {
             NS_LOG_INFO("Node " << stack->GetNode()->GetId() << " starting as ROUTER");
-            // Originale: Avvia il dispositivo come router
-            NlmeStartRouterRequestParams startRouterParams;
+            // Original: Start the device as a router
+            NlmeStartRouterRequestParams startRouterParams; 
             Simulator::ScheduleNow(&ZigbeeNwk::NlmeStartRouterRequest,
                                    stack->GetNwk(),
                                    startRouterParams);
@@ -427,22 +414,22 @@ SendData(Ptr<ZigbeeStack> stackSrc, Ptr<ZigbeeStack> stackDst)
     // before transmitting data (Mesh routing).
 
     // --- Packet Sent ---
-    NS_LOG_INFO("Node " << stackSrc->GetNode()->GetId() << " sending data to Node " << stackDst->GetNode()->GetId()); // Log invio 
+    NS_LOG_INFO("Node " << stackSrc->GetNode()->GetId() << " sending data to Node " << stackDst->GetNode()->GetId()); // Log send
     g_totalPacketsSent++;
-    g_packetCounter++; //Incrementa per ottenere un ID univoco
+    g_packetCounter++; //Increment to get a unique ID
 
-    Ptr<Packet> p = Create<Packet>(5); // Crea un pacchetto di 5 byte
+    Ptr<Packet> p = Create<Packet>(5); // Create a 5-byte packet
 
     // --- Add Packet Tag --- 
     PacketIdTag tag;
-    tag.SetPacketId(g_packetCounter); // Imposta l'ID univoco nel tag
-    p->AddPacketTag(tag); // Aggiungi il tag al pacchetto
+    tag.SetPacketId(g_packetCounter); // Set the unique ID in the tag
+    p->AddPacketTag(tag); // Add the tag to the packet
 
-    // --- Registra il Tempo di Invio ---
-    g_sendTimeMap[g_packetCounter] = Simulator::Now(); // Associa l'ID del pacchetto al tempo corrente
+    // --- Record Send Time ---
+    g_sendTimeMap[g_packetCounter] = Simulator::Now(); // Associate the packet ID with the current time
 
     NldeDataRequestParams dataReqParams;
-    dataReqParams.m_dstAddrMode = UCST_BCST;
+    dataReqParams.m_dstAddrMode = UCST_BCST; 
     dataReqParams.m_dstAddr = stackDst->GetNwk()->GetNetworkAddress();
     dataReqParams.m_nsduHandle = 1; // Puoi usare g_packetCounter se vuoi un handle univoco
     dataReqParams.m_discoverRoute = ENABLE_ROUTE_DISCOVERY; // Enable route discovery if no route is known
@@ -556,11 +543,11 @@ main(int argc, char* argv[])
     zstack2->GetNwk()->AssignStreams(20);
     zstack3->GetNwk()->AssignStreams(30);
     zstack4->GetNwk()->AssignStreams(40);
-    zstack5->GetNwk()->AssignStreams(50); // <-- Aggiunto
-    zstack6->GetNwk()->AssignStreams(60); // <-- Aggiunto
-    zstack7->GetNwk()->AssignStreams(70); // <-- Aggiunto
-    zstack8->GetNwk()->AssignStreams(80); // <-- Aggiunto
-    zstack9->GetNwk()->AssignStreams(90); // <-- Aggiunto
+    zstack5->GetNwk()->AssignStreams(50); 
+    zstack6->GetNwk()->AssignStreams(60); 
+    zstack7->GetNwk()->AssignStreams(70); 
+    zstack8->GetNwk()->AssignStreams(80); 
+    zstack9->GetNwk()->AssignStreams(90); 
     
 //Mobility configuration
     MobilityHelper mobility;
@@ -786,15 +773,15 @@ main(int argc, char* argv[])
                                    netDiscParams9);
 
 // ---------------------------------------------------------------------
-//todo --- Configurazione Trasmissione e Ispezione ---
+//todo --- Transmission and Inspection Configuration ---
 // ---------------------------------------------------------------------
-    // Modifica queste righe per cambiare facilmente i nodi coinvolti
-    // Nota: zstackN corrisponde allo stack Zigbee del Node N della simulazione (es. zstack0 -> Node 0)
-    Ptr<ZigbeeStack> sourceStack      = zstack4; // NODO SORGENTE: Cambia qui (es. zstack5)
-    Ptr<ZigbeeStack> destinationStack = zstack6; // NODO DESTINAZIONE: Cambia qui (es. zstack3)
-    Ptr<ZigbeeStack> inspectStack     = zstack1; // NODO DA ISPEZIONARE: Cambia qui (es. destinationStack o zstack2)
+    // Modify these lines to easily change the involved nodes
+    // Note: zstackN corresponds to the Zigbee stack of Node N in the simulation (e.g., zstack0 -> Node 0)
+    Ptr<ZigbeeStack> sourceStack      = zstack4; // SOURCE NODE: Change here (e.g., zstack5)
+    Ptr<ZigbeeStack> destinationStack = zstack6; // DESTINATION NODE: Change here (e.g., zstack3)
+    Ptr<ZigbeeStack> inspectStack     = zstack1; // NODE TO INSPECT: Change here (e.g., destinationStack or zstack2)
 
-    // Stampa di log/info per confermare la configurazione scelta
+    // Log/info print to confirm the chosen configuration
     NS_LOG_INFO("--- Simulation Configuration ---");
     NS_LOG_INFO("Source Node:      Node " << sourceStack->GetNode()->GetId() << " (" << sourceStack->GetNwk()->GetIeeeAddress() << ")");
     NS_LOG_INFO("Destination Node: Node " << destinationStack->GetNode()->GetId() << " (" << destinationStack->GetNwk()->GetIeeeAddress() << ")");
@@ -808,25 +795,25 @@ main(int argc, char* argv[])
 // ---------------------------------------------------------------------
 
 //Data Transmission
-    double startTime = 12.0; // Inizio invio pacchetti
-    double interval = 0.5;  // Intervallo tra pacchetti (secondi)
-    int numPacketsToSend = 200; // Numero totale di pacchetti da inviare
+    double startTime = 12.0;    // Start sending packets
+    double interval = 0.5;      // Interval between packets (seconds)
+    int numPacketsToSend = 200; // Total number of packets to send
         
     NS_LOG_INFO("Scheduling " << numPacketsToSend << " packets from Node " << sourceStack->GetNode()->GetId()
                 << " to Node " << destinationStack->GetNode()->GetId() << " starting at " << startTime << "s");
 
     for (int i = 0; i < numPacketsToSend; ++i) {
-        // Schedula l'invio di pacchetti a intervalli regolari dal nodo sorgente al nodo di destinazione
+        // Schedule sending packets at regular intervals from the source node to the destination node
         Simulator::Schedule(Seconds(startTime + i * interval), &SendData, sourceStack, destinationStack);
     }
 
 // ---------------------------------------------------------------------
-// --- Calcolo e Stampa Risultati Finali ---
+// --- Calculate and Print Final Results ---
 // ---------------------------------------------------------------------
-    // ASSICURATI CHE QUESTO TEMPO SIA DOPO L'ULTIMO PACCHETTO + POSSIBILE LATENZA MASSIMA
-    // Esempio: se invii 200 pacchetti ogni 0.5s a partire da 12s, l'ultimo invio è a 12 + 199*0.5 = 111.5s
-    // Dagli ancora tempo per arrivare, es. 120s o più.
-    double calculationTime = startTime + (numPacketsToSend * interval) + 10.0; // Tempo di sicurezza aggiunto
+    // MAKE SURE THIS TIME IS AFTER THE LAST PACKET + POSSIBLE MAXIMUM LATENCY
+    // Example: if you send 200 packets every 0.5s starting from 12s, the last send is at 12 + 199*0.5 = 111.5s
+    // Give it more time to arrive, e.g., 120s or more.
+    double calculationTime = startTime + (numPacketsToSend * interval) + 10.0; // Added safety time
     Simulator::Schedule(Seconds(calculationTime), []() {
     std::cout << "\n-----------------------------------------\n";
     std::cout << "---      Simulation Results           ---\n";
@@ -834,7 +821,7 @@ main(int argc, char* argv[])
     std::cout << "Total Packets Sent:     " << g_totalPacketsSent << "\n";
     std::cout << "Total Packets Received: " << g_totalPacketsReceived << "\n";
 
-    // Calcolo PDR Medio
+    // Calculate Average PDR
     double avgPdr = 0.0;
     if (g_totalPacketsSent > 0)
     {
@@ -846,7 +833,7 @@ main(int argc, char* argv[])
         std::cout << "PDR: N/A (No packets sent)\n";
     }
     
-    // Calcolo metriche di latenza
+    // Calculate latency metrics
     std::cout << "--- Latency Metrics (End-to-End) ---\n";
     if (!g_delayList.empty())
     {
@@ -854,17 +841,17 @@ main(int argc, char* argv[])
         Time minDelay = g_delayList[0];
         Time maxDelay = g_delayList[0];
 
-        // Calcola somma, min, max
+        // Calculate sum, min, max
         for (const auto& delay : g_delayList) {
             totalDelay += delay;
             if (delay < minDelay) minDelay = delay;
             if (delay > maxDelay) maxDelay = delay;
         }
 
-        // Calcola media
+        // Calculate average
         Time avgDelay = totalDelay / g_delayList.size();
 
-        // Calcola Jitter (come deviazione standard della latenza in secondi)
+        // Calculate Jitter (as standard deviation of latency in seconds)
         double sumSquaredDiff = 0.0;
         double avgDelaySec = avgDelay.GetSeconds();
         for (const auto& delay : g_delayList) {
@@ -891,52 +878,51 @@ main(int argc, char* argv[])
     std::cout << "-------------------------------------------\n";
     });
     
-    //Stampa TABELLE
-    // Scegli il nodo da ispezionare
+    //Print TABLES
+    // Choose the node to inspect
     Ptr<ZigbeeStack> nodeToInspect = inspectStack;
-    // Scegli un tempo poco prima dei risultati finali
-    double tablePrintTime = calculationTime - 0.5; // Stampa mezzo secondo prima dei risultati
-    // Assicurati che il tempo non sia troppo presto se calculationTime fosse molto vicino all'ultimo invio
+    // Choose a time shortly before the final results
+    double tablePrintTime = calculationTime - 0.5; // Print half a second before results
+    // Make sure the time is not too early if calculationTime is very close to the last send
     if (tablePrintTime < startTime + (numPacketsToSend * interval)) {
-        tablePrintTime = calculationTime; // Altrimenti stampa allo stesso tempo dei risultati
+        tablePrintTime = calculationTime; // Otherwise, print at the same time as results
     }
-    // Stampa di log/info per confermare la configurazione scelta prima della simulazione
+    // Log/info print to confirm the chosen configuration before simulation
     NS_LOG_INFO("Scheduling final tables print for Node " << nodeToInspect->GetNode()->GetId()
                 << " at T=" << tablePrintTime << " s");
     std::cout << "INFO: Scheduling final tables print for Node " << nodeToInspect->GetNode()->GetId()
               << " at T=" << tablePrintTime << " s\n";
     std::cout << "----------------------------------------------------------\n";
 
-
-    // Crea l'output stream wrapper per std::cout (necessario per le funzioni Print*)
+    // Create the output stream wrapper for std::cout (necessary for Print* functions)
     Ptr<OutputStreamWrapper> stream = Create<OutputStreamWrapper>(&std::cout);
 
-    // ---Schedula la stampa di una riga prima della stampa delle tabelle---
+    // ---Schedule printing a line before printing the tables---
     Simulator::Schedule(Seconds(tablePrintTime), [nodeToInspect]() {
         std::cout << "----  END TRANSMISSION  ----\n";
         std::cout << "\n-----------------------------------------\n";
         std::cout << "---         Tables for Node " << nodeToInspect->GetNode()->GetId()
                   << "         ---\n";
         std::cout << "-----------------------------------------\n";
-    });
+    }); 
 
-    // stampa la NEIGHBOR TABLE alla fine della trasmissione di tutti i pacchetti
+    // Print the NEIGHBOR TABLE at the end of all packet transmissions
     Simulator::Schedule(Seconds(tablePrintTime),
                         &ZigbeeNwk::PrintNeighborTable,
                         nodeToInspect->GetNwk(),
                         stream);
-    // stampa la ROUTING TABLE alla fine della trasmissione di tutti i pacchetti
+    // Print the ROUTING TABLE at the end of all packet transmissions
     Simulator::Schedule(Seconds(tablePrintTime + 0.01), 
                         &ZigbeeNwk::PrintRoutingTable,
                         nodeToInspect->GetNwk(),
                         stream);
-    // stampa la ROUTE DISCOVERY TABLE subito dopo l'invio del primo pacchetto
+    // Print the ROUTE DISCOVERY TABLE immediately after sending the first packet
     //Simulator::Schedule(Seconds(startTime + 0.02), 
     //                    &ZigbeeNwk::PrintRouteDiscoveryTable,
     //                    nodeToInspect->GetNwk(),
     //                    stream);
 
-    // Schedula TraceRoute tramite la funzione Wrapper (funziona solo con un nodo router di origine)
+    // Schedule TraceRoute via the Wrapper function (only works with a router source node)
     Simulator::Schedule(Seconds(tablePrintTime + 0.03), // Mantieni lo stesso tempo o aggiusta se necessario
                        &ScheduleTraceRouteWrapper,      // Chiama la NUOVA funzione wrapper
                        sourceStack,                     // Passa il PUNTATORE allo stack sorgente
@@ -965,8 +951,8 @@ main(int argc, char* argv[])
     */
 //---------------------------------------------------------------------
 
-// --- Controllo Simulazione ---
-    double stopTime = calculationTime + 5.0; // Assicurati che la simulazione finisca DOPO il calcolo
+// --- Simulation Control ---
+    double stopTime = calculationTime + 5.0; // Ensure simulation ends AFTER calculation
     Simulator::Stop(Seconds(stopTime));
     Simulator::Run();
     Simulator::Destroy();
