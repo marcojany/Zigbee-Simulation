@@ -139,48 +139,78 @@ private:
 };
 
 //* TraceRoute Function
-//Purpose: This function is crucial for understanding how routing works. It traces the route from a source (src) to a destination (dst) by querying the routing tables of the intermediate nodes.
-//How it works:
-//1. It starts at the source node.
-//2. It uses zstack->GetNwk()->FindRoute(dst, neighbor) to find the next hop toward the destination.
-//3. FindRoute returns the next hop's address and a boolean neighbor indicating if the next hop is a direct neighbor.
-//4. It iterates through the hops until it reaches the destination or finds that the destination is unreachable.
-//5. It prints the route information to the console.
+//* Purpose:
+//* This function traces the route from a source to a destination in a Zigbee network by querying the routing tables of intermediate nodes.
+//* It detects and terminates loops in the route.
+//*
+//* How it works:
+//* 1. It starts at the source node.
+//* 2. It uses zstack->GetNwk()->FindRoute(dst, neighbor) to find the next hop toward the destination.
+//*    FindRoute returns the next hop's address and a boolean 'neighbor' indicating if the next hop is a direct neighbor.
+//* 3. It iterates through the hops, printing the route information for each hop.
+//* 4. If a loop is detected (a node is visited 3 times), the trace is aborted.
+//* 5. The trace also stops if the destination is reached, the destination is unreachable, or a maximum hop limit is exceeded.
 static void
 TraceRoute(Mac16Address src, Mac16Address dst)
 {
     std::cout << "\nTime " << Simulator::Now().As(Time::S) << " | "
-              << "Traceroute to destination [" << dst << "]:\n";
-    Mac16Address target = src;
-    uint32_t count = 1;
-    while (target != Mac16Address("FF:FF") && target != dst)
-    {
-        Ptr<ZigbeeStack> zstack;
+              << "Traceroute from [" << src << "] to destination [" << dst << "]:\n";
 
+    Mac16Address currentHopAddr = src;
+    uint32_t hopCount = 1;
+    const uint32_t MAX_HOPS = 30; // May need to increase if allowing more repetitions
+    // Loop if a node becomes the starting point of an hop this many times
+    const int MAX_VISITS_PER_NODE_FOR_LOOP_DETECTION = 3; 
+
+    // Map: Node Address -> Visit Count (as currentHopAddr)
+    std::map<Mac16Address, int> visitedNodeCounts; 
+
+    while (currentHopAddr != Mac16Address("FF:FF") && currentHopAddr != dst && hopCount <= MAX_HOPS)
+    {
+        // Increment the visit count for the current node
+        visitedNodeCounts[currentHopAddr]++;
+
+        // Check if we have visited this node (as a starting point) too many times (potential loop)
+        if (visitedNodeCounts[currentHopAddr] >= MAX_VISITS_PER_NODE_FOR_LOOP_DETECTION) {
+            std::cout << hopCount << ". Node " << currentHopAddr << " has been the start of an hop "
+                      << visitedNodeCounts[currentHopAddr] << " times. LOOP DETECTED! Aborting trace.\n";
+            break; // Exit the while loop
+        }
+
+        Ptr<ZigbeeStack> currentHopStack = nullptr;
+
+        // Find the stack for the current hop address
         for (auto i = zigbeeStacks.Begin(); i != zigbeeStacks.End(); i++)
         {
-            zstack = *i;
-            if (zstack->GetNwk()->GetNetworkAddress() == target)
+            Ptr<ZigbeeStack> zstack = *i;
+            if (zstack->GetNwk()->GetNetworkAddress() == currentHopAddr)
             {
+                currentHopStack = zstack;
                 break;
             }
         }
 
-        bool neighbor = false;
-        target = zstack->GetNwk()->FindRoute(dst, neighbor);
-        if (target == Mac16Address("FF:FF"))
+        if (!currentHopStack)
         {
-            std::cout << count << ". Node " << zstack->GetNode()->GetId() << " ["
-                      << zstack->GetNwk()->GetNetworkAddress() << " | "
-                      << zstack->GetNwk()->GetIeeeAddress() << "]: "
-                      << " Destination Unreachable\n";
+            std::cout << hopCount << ". Node with address [" << currentHopAddr << "] not found in zigbeeStacks. Aborting trace.\n";
+            break;
         }
-        else
+
+        bool neighbor = false;
+        Mac16Address nextHopAddr = currentHopStack->GetNwk()->FindRoute(dst, neighbor);
+
+        std::cout << hopCount << ". Node " << currentHopStack->GetNode()->GetId() << " ["
+                  << currentHopStack->GetNwk()->GetNetworkAddress() << " | "
+                  << currentHopStack->GetNwk()->GetIeeeAddress() << "]: ";
+
+        if (nextHopAddr == Mac16Address("FF:FF"))
         {
-            std::cout << count << ". Node " << zstack->GetNode()->GetId() << " ["
-                      << zstack->GetNwk()->GetNetworkAddress() << " | "
-                      << zstack->GetNwk()->GetIeeeAddress() << "]: "
-                      << "NextHop [" << target << "] ";
+            std::cout << "Destination Unreachable\n";
+            currentHopAddr = nextHopAddr; // This will terminate the loop
+        }
+        else if (nextHopAddr == dst)
+        {
+            std::cout << "NextHop [" << nextHopAddr << "] (Destination Reached) ";
             if (neighbor)
             {
                 std::cout << "(*Neighbor)\n";
@@ -189,12 +219,33 @@ TraceRoute(Mac16Address src, Mac16Address dst)
             {
                 std::cout << "\n";
             }
-            count++;
+            currentHopAddr = nextHopAddr; // This will terminate the loop
         }
+        else
+        {
+            std::cout << "NextHop [" << nextHopAddr << "] ";
+            if (neighbor)
+            {
+                std::cout << "(*Neighbor)\n";
+            }
+            else
+            {
+                std::cout << "\n";
+            }
+            currentHopAddr = nextHopAddr; // Move to the next hop
+        }
+        hopCount++;
+    }
+
+    // Check if the loop terminated due to MAX_HOPS, but not due to visit count loop detection
+    if (hopCount > MAX_HOPS && 
+        currentHopAddr != dst && 
+        (visitedNodeCounts.empty() || visitedNodeCounts[currentHopAddr] < MAX_VISITS_PER_NODE_FOR_LOOP_DETECTION))
+    {
+        std::cout << "Traceroute stopped: Exceeded maximum hop count (" << MAX_HOPS << "). Possible very long path.\n";
     }
     std::cout << "\n";
 }
-
 //* Wrapper function to call TraceRoute at the scheduled time
 static void ScheduleTraceRouteWrapper(Ptr<ZigbeeStack> srcStack, Ptr<ZigbeeStack> dstStack)
 {
@@ -777,9 +828,9 @@ main(int argc, char* argv[])
 // ---------------------------------------------------------------------
     // Modify these lines to easily change the involved nodes
     // Note: zstackN corresponds to the Zigbee stack of Node N in the simulation (e.g., zstack0 -> Node 0)
-    Ptr<ZigbeeStack> sourceStack      = zstack4; // SOURCE NODE: Change here (e.g., zstack5)
-    Ptr<ZigbeeStack> destinationStack = zstack6; // DESTINATION NODE: Change here (e.g., zstack3)
-    Ptr<ZigbeeStack> inspectStack     = zstack1; // NODE TO INSPECT: Change here (e.g., destinationStack or zstack2)
+    Ptr<ZigbeeStack> sourceStack      = zstack1; // SOURCE NODE: Change here (e.g., zstack5)
+    Ptr<ZigbeeStack> destinationStack = zstack9; // DESTINATION NODE: Change here (e.g., zstack3)
+    Ptr<ZigbeeStack> inspectStack     = zstack0; // NODE TO INSPECT: Change here (e.g., destinationStack or zstack2)
 
     // Log/info print to confirm the chosen configuration
     NS_LOG_INFO("--- Simulation Configuration ---");
@@ -898,13 +949,13 @@ main(int argc, char* argv[])
     Ptr<OutputStreamWrapper> stream = Create<OutputStreamWrapper>(&std::cout);
 
     // ---Schedule printing a line before printing the tables---
-    Simulator::Schedule(Seconds(tablePrintTime), [nodeToInspect]() {
-        std::cout << "----  END TRANSMISSION  ----\n";
-        std::cout << "\n-----------------------------------------\n";
-        std::cout << "---         Tables for Node " << nodeToInspect->GetNode()->GetId()
-                  << "         ---\n";
-        std::cout << "-----------------------------------------\n";
-    }); 
+    Simulator::Schedule(Seconds(tablePrintTime), [nodeToInspect]() { 
+        std::cout << "----  END TRANSMISSION  ----\n"; 
+        std::cout << "\n-----------------------------------------\n"; 
+        std::cout << "---         Tables for Node " << nodeToInspect->GetNode()->GetId() 
+                  << "         ---\n"; 
+        std::cout << "-----------------------------------------\n"; 
+    });  
 
     // Print the NEIGHBOR TABLE at the end of all packet transmissions
     Simulator::Schedule(Seconds(tablePrintTime),
@@ -922,11 +973,11 @@ main(int argc, char* argv[])
     //                    nodeToInspect->GetNwk(),
     //                    stream);
 
-    // Schedule TraceRoute via the Wrapper function (only works with a router source node)
-    Simulator::Schedule(Seconds(tablePrintTime + 0.03), // Mantieni lo stesso tempo o aggiusta se necessario
-                       &ScheduleTraceRouteWrapper,      // Chiama la NUOVA funzione wrapper
-                       sourceStack,                     // Passa il PUNTATORE allo stack sorgente
-                       destinationStack);                // Passa il PUNTATORE allo stack destinazione
+    // Schedule TraceRoute via the Wrapper function
+    Simulator::Schedule(Seconds(tablePrintTime + 0.03), // Keep the same time or adjust if needed
+                       &ScheduleTraceRouteWrapper,      // Call the NEW wrapper function
+                       sourceStack,                     // Pass the POINTER to the source stack
+                       destinationStack);                // Pass the POINTER to the destination stack
 
 // --------------------------------------------------------------------
 // --- Animation & Tracing ---
