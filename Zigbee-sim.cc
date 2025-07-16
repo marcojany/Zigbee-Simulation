@@ -771,8 +771,7 @@ main(int argc, char* argv[])
                                    &ZigbeeNwk::NlmeNetworkDiscoveryRequest,
                                    zstack4->GetNwk(),
                                    netDiscParams4);
-
-    // --- Added for End Devices 5 to 9 ---
+    // End devices
     NlmeNetworkDiscoveryRequestParams netDiscParams5;
     netDiscParams5.m_scanChannelList.channelPageCount = 1;
     netDiscParams5.m_scanChannelList.channelsField[0] = 0x00007800; // BitMap: Channels 11~14
@@ -830,7 +829,7 @@ main(int argc, char* argv[])
     // Note: zstackN corresponds to the Zigbee stack of Node N in the simulation (e.g., zstack0 -> Node 0)
     Ptr<ZigbeeStack> sourceStack      = zstack1; // SOURCE NODE: Change here (e.g., zstack5)
     Ptr<ZigbeeStack> destinationStack = zstack9; // DESTINATION NODE: Change here (e.g., zstack3)
-    Ptr<ZigbeeStack> inspectStack     = zstack0; // NODE TO INSPECT: Change here (e.g., destinationStack or zstack2)
+    Ptr<ZigbeeStack> inspectStack     = zstack4; // NODE TO INSPECT: Change here (e.g., destinationStack or zstack2)
 
     // Log/info print to confirm the chosen configuration
     NS_LOG_INFO("--- Simulation Configuration ---");
@@ -967,11 +966,11 @@ main(int argc, char* argv[])
                         &ZigbeeNwk::PrintRoutingTable,
                         nodeToInspect->GetNwk(),
                         stream);
-    // Print the ROUTE DISCOVERY TABLE immediately after sending the first packet
-    //Simulator::Schedule(Seconds(startTime + 0.02), 
-    //                    &ZigbeeNwk::PrintRouteDiscoveryTable,
-    //                    nodeToInspect->GetNwk(),
-    //                    stream);
+    //!Print the ROUTE DISCOVERY TABLE immediately after sending the first packet
+    Simulator::Schedule(Seconds(startTime + 0.72), 
+                        &ZigbeeNwk::PrintRouteDiscoveryTable,
+                        nodeToInspect->GetNwk(),
+                        stream);
 
     // Schedule TraceRoute via the Wrapper function
     Simulator::Schedule(Seconds(tablePrintTime + 0.03), // Keep the same time or adjust if needed
