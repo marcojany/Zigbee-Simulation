@@ -827,8 +827,8 @@ main(int argc, char* argv[])
 // ---------------------------------------------------------------------
     // Modify these lines to easily change the involved nodes
     // Note: zstackN corresponds to the Zigbee stack of Node N in the simulation (e.g., zstack0 -> Node 0)
-    Ptr<ZigbeeStack> sourceStack      = zstack1; // SOURCE NODE: Change here (e.g., zstack5)
-    Ptr<ZigbeeStack> destinationStack = zstack9; // DESTINATION NODE: Change here (e.g., zstack3)
+    Ptr<ZigbeeStack> sourceStack      = zstack2; // SOURCE NODE: Change here (e.g., zstack5)
+    Ptr<ZigbeeStack> destinationStack = zstack8; // DESTINATION NODE: Change here (e.g., zstack3)
     Ptr<ZigbeeStack> inspectStack     = zstack4; // NODE TO INSPECT: Change here (e.g., destinationStack or zstack2)
 
     // Log/info print to confirm the chosen configuration
